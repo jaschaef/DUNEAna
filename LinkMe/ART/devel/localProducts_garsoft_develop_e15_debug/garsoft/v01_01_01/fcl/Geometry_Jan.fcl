@@ -1,0 +1,37 @@
+BEGIN_PROLOG
+
+standard_geo:
+{
+ ForceUseFCLOnly:   false
+ SortingParameters:
+ {
+  PixelActiveSize: 0.3      # cm
+  PixelPitch:      0.333333 # cm
+ }
+ RelativePath:      ""
+ GDML:              "Mainz.gdml"
+ ROOT:              "Mainz.gdml"
+ SurfaceY:          0.          # cm
+ Name:              "Realistic"
+ PositionEpsilon:   1.e-4
+}
+
+standard_geometry_helper:
+{
+ service_provider: StandardGeometryHelper
+}
+
+standard_auxdet_geo:
+{
+ GDML:              "Mainz.gdml"
+ RelativePath:      ""
+ ForceUseFCLOnly:   false
+ SortingParameters: {}
+}
+
+example_auxdetgeometry_helper:
+{
+ service_provider: AuxDetGeometryHelperExample
+}
+
+END_PROLOG

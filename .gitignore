@@ -1,3 +1,14 @@
 bin
 build
 lib
+*~
+*.log
+.cproject
+.project
+.settings
+.pydevproject
+!.gitignore
+ART
+!LinkMe/ART
+Geometry
+!LinkMe/Geometry
