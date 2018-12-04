@@ -6,6 +6,7 @@ lib
 .cproject
 .project
 .settings
+edep-sim
 .pydevproject
 !.gitignore
 ART

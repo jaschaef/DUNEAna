@@ -140,7 +140,25 @@ cd $DIR
 
 echo
 
+
+# echo "Now building the edep-sim package"
+
+# if [ -d edep-sim ]
+# then
+# 		echo " Removing old installation in edep-sim folder"
+# 		rm -rf edep-sim
+# fi
+
+# git clone https://github.com/ClarkMcGrew/edep-sim.git
+# cd edep-sim
+# . setup.sh
+# edep-build doc
+
+
+# echo
+
 # echo "Now building the DUNEAna package itself"
+
 # if [ ! -d build ]
 # then
 # 	echo " Creating build folder"
@@ -174,16 +192,6 @@ echo
 # fi
 
  
-
-#echo
-#echo "Finally linking all files in LinkMe to corresponing locations"
-
-
-
-# cd $DIR
-# ReplaceWithLinks ${DIR}/LinkMe/ART ${DIR}/ART
-# ReplaceWithLinks ${DIR}/LinkMe/Geometry ${DIR}/Geometry
-
 
 echo
 echo "Installation done. You will need to relog and 'source setup.sh' for everything to work properly"
