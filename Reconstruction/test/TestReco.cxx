@@ -20,8 +20,6 @@ int main(int argc, char* argv[]) {
 	// }
 
 	TString geoFile = "ND_Strawman_Concept_v01.gdml";
-	//TString baseNode = "Default/volWorld_1/volDetEnclosure_0";
-	TString baseNode = "Default/volWorld_1/volDetEnclosure_0/volNDHPgTPC_0";
 	bool saveGeoManager = false;
 
 	if(argc > 0)
