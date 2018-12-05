@@ -1,9 +1,13 @@
 #include "EcalHit.h"
-#include "TObjArray.h"
-#include "TObjString.h"
-
+#include "EcalFunctions.h"
 
 using namespace std;
+
+
+bool EcalHit::useOriginalPositions = false;
+float EcalHit::energyThreshold = 0.;
+bool EcalHit::transformInput = false;
+
 
 EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 	TGeoNode* _node = gGeoManager->FindNode(_x, _y, _z);
@@ -14,14 +18,18 @@ EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 
 	TString nodePath = gGeoManager->GetPath();
 	// cout << "Found node: " << nodePath << endl;
-	
+
 	TGeoNavigator* navigator = gGeoManager->GetCurrentNavigator();
 	if(!navigator){
 		cout << endl << "Can't find navigator!" << endl;
 		return;
 	}
 
-	vector<TString> splits = Split(nodePath, "/");
+	x_orig = _x;
+	y_orig = _y;
+	z_orig = _z;
+
+	vector<TString> splits = EcalFunctions::Split(nodePath, "/");
 	TString naviPath = "";
 
 	for(unsigned int i=0;i<splits.size();i++){
@@ -44,8 +52,13 @@ EcalHit::EcalHit(float _E, TGeoNode* _node, TString _navigatorPath){
 		return;
 	}
 
+	x_orig = 0.;
+	y_orig = 0.;
+	z_orig = 0.;
+
+
 	navigator->cd(_navigatorPath);
-	
+
 	Initialize(_E, _node, navigator);
 }
 
@@ -92,6 +105,8 @@ EcalHit::EcalHit(float _E, TGeoNode* _node, TString _navigatorPath){
 EcalHit::EcalHit(const EcalHit& ecalHit){
 	E = ecalHit.E;
 
+	direction = TVector3(ecalHit.direction);
+
 	x = ecalHit.x;
 	y = ecalHit.y;
 	z = ecalHit.z;
@@ -100,6 +115,10 @@ EcalHit::EcalHit(const EcalHit& ecalHit){
 	dy = ecalHit.dy;
 	dz = ecalHit.dz;
 
+	x_orig = ecalHit.x_orig;
+	y_orig = ecalHit.y_orig;
+	z_orig = ecalHit.z_orig;
+
 	phi = ecalHit.phi;
 	theta = ecalHit.theta;
 	psi = ecalHit.psi;
@@ -107,8 +126,8 @@ EcalHit::EcalHit(const EcalHit& ecalHit){
 }
 
 
-EcalHit::EcalHit(float _E, 
-					float _x, float _y, float _z, 
+EcalHit::EcalHit(float _E,
+					float _x, float _y, float _z,
 					float _dx, float _dy, float _dz,
 					float _phi, float _theta, float _psi
 				){
@@ -118,9 +137,16 @@ EcalHit::EcalHit(float _E,
 	y = _y;
 	z = _z;
 
+	TVector3 _direction = TVector3(x,y,z);
+	direction.SetMagThetaPhi(E, _direction.Theta(), _direction.Phi());
+
 	dx = _dx;
 	dy = _dy;
 	dz = _dz;
+
+	x_orig = x;
+	y_orig = y;
+	z_orig = z;
 
 	phi = _phi;
 	theta = _theta;
@@ -139,18 +165,39 @@ void EcalHit::Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator){
 	E = _E;
 	// node = _node;
 
-	// Set the absolute position in global coordinates
-	const Double_t* coordinatesLocal = _node->GetMatrix()->GetTranslation();
-	Double_t coordinatesMaster[3] = {0.,0.,0.};
-	navigator->LocalToMaster(coordinatesLocal, coordinatesMaster);
+	if(!EcalHit::useOriginalPositions){
+		// Set the absolute position in global coordinates
+		const Double_t* coordinatesLocal = _node->GetMatrix()->GetTranslation();
+		Double_t coordinatesMaster[3] = {0.,0.,0.};
+		navigator->LocalToMaster(coordinatesLocal, coordinatesMaster);
 
-	// cout << "coordinatesLocal  = " << coordinatesLocal[0] << ", " << coordinatesLocal[1] << ", " << coordinatesLocal[2] << endl;
-	// cout << "coordinatesMaster = " << coordinatesMaster[0] << ", " << coordinatesMaster[1] << ", " << coordinatesMaster[2] << endl;
+		// cout << "coordinatesLocal  = " << coordinatesLocal[0] << ", " << coordinatesLocal[1] << ", " << coordinatesLocal[2] << endl;
+		// cout << "coordinatesMaster = " << coordinatesMaster[0] << ", " << coordinatesMaster[1] << ", " << coordinatesMaster[2] << endl;
 
-	x = float(round(coordinatesMaster[0]*1000.)/1000.);
-	y = float(round(coordinatesMaster[1]*1000.)/1000.);
-	z = float(round(coordinatesMaster[2]*1000.)/1000.);
-	
+		x = float(round(coordinatesMaster[0]*1000.)/1000.);
+		y = float(round(coordinatesMaster[1]*1000.)/1000.);
+		z = float(round(coordinatesMaster[2]*1000.)/1000.);
+	}else{
+		x = x_orig;
+		y = y_orig;
+		z = z_orig;
+	}
+
+	if(EcalHit::transformInput){
+		float h = y;
+		y = z;
+		z = x;
+		x = h;
+
+		h = y_orig;
+		y_orig = z_orig;
+		z_orig = x_orig;
+		x_orig = h;
+	}
+
+	TVector3 _direction = TVector3(x,y,z);
+	direction.SetMagThetaPhi(E, _direction.Theta(), _direction.Phi());
+
 	// Set the size of the box
 	// TODO: What if it's not a box?
 	TGeoBBox* box = (TGeoBBox*)_node->GetVolume()->GetShape();
@@ -200,51 +247,11 @@ void EcalHit::Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator){
 // }
 
 
-TGeoNode* EcalHit::GetNode(TString absoluteNodeName){
-
-	TGeoManager *geom = gGeoManager;
-	if(!geom){
-		cout << endl << "Problem getting GeoManager!" << endl;
-		return 0;
-	}
-
-
-	vector<TString> nodeNames = Split(absoluteNodeName, "/");
-
-	TGeoNode* currentNode = geom->GetTopNode();
-
-	for(unsigned int i=0;i<nodeNames.size();i++){
-		currentNode = currentNode->GetVolume()->GetNode(nodeNames[i]);
-
-		if(!currentNode){
-			cout << "Can't get child node '" << nodeNames[i] << "' of node '" << currentNode->GetName() << "'!"<< endl;
-			return 0;
-		}
-	}
-
-	return currentNode;
-}
-
-
-
-vector<TString> EcalHit::Split(TString input, TString delim){
-	TObjArray *tx = input.Tokenize(delim);
-
-	vector<TString> splits;
-
-	TString filename = ((TObjString *)(tx->At(tx->GetEntries()-1)))->String();
-
-	for (Int_t i = 0; i < tx->GetEntries(); i++)
-		splits.push_back(((TObjString *)(tx->At(i)))->String());
-
-	return splits;
-}
-
-
 
 void EcalHit::Print(){
 	cout << "EcalHit: E = " << E << ", x = " << x << " +- " << dx << ", y = " << y << " +- " << dy << ", z = " << z << " +- " << dz << endl;
-	cout << "         phi = " << phi << ", theta = " << theta << ", psi = " << psi << endl;
+	cout << "         eulerPhi = " << phi << ", eulerTheta = " << theta << ", eulerPsi = " << psi << endl;
+	cout << "         phi = " << direction.Phi() << ", theta = " << direction.Theta() << endl;
 	cout << "         pos = " << GetPositionKey() << endl;
 }
 
@@ -254,8 +261,11 @@ vector<EcalHit*> EcalHit::AddCells(vector<EcalHit*> hits){
 
 	map<TString, unsigned int> cellsMap;
 	vector<EcalHit*> cells;
-	
+
 	for(const auto& hit : hits){
+		if(hit->GetE() < EcalHit::energyThreshold)
+			continue;
+
 		TString key = hit->GetPositionKey();
 
 		// no cell at this position
@@ -291,7 +301,8 @@ TString EcalHit::GetPositionKey(){
 	if(useZ == 0.)
 		useZ = 0.;
 
-	TString key = ToString(useX) + "_" + ToString(useY) + "_" + ToString(useZ);
+	TString key = EcalFunctions::ToString(useX) + "_" + EcalFunctions::ToString(useY) + "_" + EcalFunctions::ToString(useZ);
 
 	return key;
 }
+

@@ -12,7 +12,7 @@ set( ${PROJECT_NAME}_VERSION_PATCH 0 )
 message( "cmake base dir: ${CMAKE_SOURCE_DIR}" )
 
 list( APPEND CMAKE_PREFIX_PATH $ENV{ROOTSYS} )
-find_package( ROOT REQUIRED COMPONENTS Geom )
+find_package( ROOT REQUIRED COMPONENTS Geom MathCore Minuit2 )
 
 include_directories ( "${CMAKE_SOURCE_DIR}/source/" )
 include_directories ( "${ROOT_INCLUDE_DIRS}" )
