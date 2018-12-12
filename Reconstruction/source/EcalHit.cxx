@@ -16,32 +16,31 @@ EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 		return;
 	}
 
-	TString nodePath = gGeoManager->GetPath();
-	// cout << "Found node: " << nodePath << endl;
+	// cout << "Found Node: " << _node->GetName() << endl;
 
-	TGeoNavigator* navigator = gGeoManager->GetCurrentNavigator();
-	if(!navigator){
-		cout << endl << "Can't find navigator!" << endl;
-		return;
-	}
+	// TString nodePath = gGeoManager->GetPath();
+    //
+	// TGeoNavigator* navigator = gGeoManager->GetCurrentNavigator();
+	// if(!navigator){
+	// 	cout << endl << "Can't find navigator!" << endl;
+	// 	return;
+	// }
 
 	x_orig = _x;
 	y_orig = _y;
 	z_orig = _z;
 
-	vector<TString> splits = EcalFunctions::Split(nodePath, "/");
-	TString naviPath = "";
+	// vector<TString> splits = EcalFunctions::Split(nodePath, "/");
+	// TString naviPath = "";
+    //
+	// for(unsigned int i=0;i<splits.size();i++){
+	// 	naviPath += splits[i] + "/";
+	// }
 
-	for(unsigned int i=0;i<splits.size();i++){
-		naviPath += splits[i] + "/";
-	}
+	Initialize(_E, _node);
 
-	navigator->cd(naviPath);
-	gGeoManager->CdUp();
-
-	Initialize(_E, _node, navigator);
-
-	// Print();
+	// navigator->cd(naviPath);
+	// Initialize(_E, _node, navigator);
 }
 
 
@@ -52,14 +51,15 @@ EcalHit::EcalHit(float _E, TGeoNode* _node, TString _navigatorPath){
 		return;
 	}
 
-	x_orig = 0.;
-	y_orig = 0.;
-	z_orig = 0.;
-
-
 	navigator->cd(_navigatorPath);
+	navigator->CdDown(_node);
 
-	Initialize(_E, _node, navigator);
+	Initialize(_E, _node);
+
+	// we don't have the actual points, so we use this to have something non-zero
+	x_orig = x;
+	y_orig = y;
+	z_orig = z;
 }
 
 
@@ -105,7 +105,7 @@ EcalHit::EcalHit(float _E, TGeoNode* _node, TString _navigatorPath){
 EcalHit::EcalHit(const EcalHit& ecalHit){
 	E = ecalHit.E;
 
-	direction = TVector3(ecalHit.direction);
+	point = TVector3(ecalHit.point);
 
 	x = ecalHit.x;
 	y = ecalHit.y;
@@ -137,8 +137,7 @@ EcalHit::EcalHit(float _E,
 	y = _y;
 	z = _z;
 
-	TVector3 _direction = TVector3(x,y,z);
-	direction.SetMagThetaPhi(E, _direction.Theta(), _direction.Phi());
+	point = TVector3(x,y,z);
 
 	dx = _dx;
 	dy = _dy;
@@ -160,23 +159,37 @@ EcalHit::~EcalHit(){
 }
 
 
-
-void EcalHit::Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator){
+// Navigator needs to be set to the current node before calling this!
+void EcalHit::Initialize(float _E, TGeoNode* _node){ //, TGeoNavigator* navigator
 	E = _E;
-	// node = _node;
+
+	// if(navigator != 0)
+	// 	navigator->CdDown(_node); //navigator->GetCurrentVolume()->FindMatrixOfDaughterVolume(_node->GetVolume());
+
+	// if(!foundMatrix){
+	// 	cout << "Can not find matrix for node '" << _node->GetName() << "'! " << endl;
+	// 	return;
+	// }
+
+
+	// cout << "coordinatesLocal  = " << coordinatesLocal[0] << ", " << coordinatesLocal[1] << ", " << coordinatesLocal[2] << endl;
+
 
 	if(!EcalHit::useOriginalPositions){
+		// cout << "Current Node: " << gGeoManager->GetCurrentNode()->GetName() << endl;
+		const Double_t* coordinatesGlobal = gGeoManager->GetCurrentMatrix()->GetTranslation();
+
 		// Set the absolute position in global coordinates
-		const Double_t* coordinatesLocal = _node->GetMatrix()->GetTranslation();
-		Double_t coordinatesMaster[3] = {0.,0.,0.};
-		navigator->LocalToMaster(coordinatesLocal, coordinatesMaster);
+		// const Double_t* coordinatesLocal = _node->GetMatrix()->GetTranslation();
+		// Double_t coordinatesGlobal[3] = {0.,0.,0.};
+		// navigator->LocalToMaster(coordinatesLocal, coordinatesGlobal);
 
 		// cout << "coordinatesLocal  = " << coordinatesLocal[0] << ", " << coordinatesLocal[1] << ", " << coordinatesLocal[2] << endl;
 		// cout << "coordinatesMaster = " << coordinatesMaster[0] << ", " << coordinatesMaster[1] << ", " << coordinatesMaster[2] << endl;
 
-		x = float(round(coordinatesMaster[0]*1000.)/1000.);
-		y = float(round(coordinatesMaster[1]*1000.)/1000.);
-		z = float(round(coordinatesMaster[2]*1000.)/1000.);
+		x = EcalFunctions::Round(coordinatesGlobal[0], 3);
+		y = EcalFunctions::Round(coordinatesGlobal[1], 3);
+		z = EcalFunctions::Round(coordinatesGlobal[2], 3);
 	}else{
 		x = x_orig;
 		y = y_orig;
@@ -195,27 +208,95 @@ void EcalHit::Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator){
 		x_orig = h;
 	}
 
-	TVector3 _direction = TVector3(x,y,z);
-	direction.SetMagThetaPhi(E, _direction.Theta(), _direction.Phi());
+	point = TVector3(x,y,z);
 
 	// Set the size of the box
 	// TODO: What if it's not a box?
 	TGeoBBox* box = (TGeoBBox*)_node->GetVolume()->GetShape();
-	dx = float(round(box->GetDX()*1000.)/1000.);
-	dy = float(round(box->GetDY()*1000.)/1000.);
-	dz = float(round(box->GetDZ()*1000.)/1000.);
+	dx = EcalFunctions::Round(box->GetDX(), 3);
+	dy = EcalFunctions::Round(box->GetDY(), 3);
+	dz = EcalFunctions::Round(box->GetDZ(), 3);
+
+
+
+	// TString currentNavPath = navigator->GetPath();
+    //
+	// cout << "CurrPath = " << currentNavPath << endl;
+    //
+	// vector<TString> splitPath = EcalFunctions::Split(currentNavPath, "/");
+    //
+	// vector<TGeoNode*> currentNavNodes;
+	// TString myPath = "";
+    //
+	// // ignore highest level node, aka 'world'
+	// for(unsigned int i=1;i<splitPath.size();i++){
+	// 	if(myPath != TString(""))
+	// 		myPath += "/";
+	// 	myPath += splitPath[i];
+    //
+	// 	// cout << "CurrNodePath: " << myPath << endl;
+    //
+	// 	TGeoNode* thisNode = EcalFunctions::GetNode(myPath);
+    //
+	// 	// cout << "  => " << thisNode->GetName() << endl;
+    //
+	// 	currentNavNodes.push_back(thisNode);
+	// }
+	// currentNavNodes.push_back(_node);
+    //
+	// Double_t rotationGlobal[9] = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
+    //
+	// for(unsigned int i=0;i<currentNavNodes.size()-1;i++){
+	// 	bool success = currentNavNodes[i]->GetVolume()->FindMatrixOfDaughterVolume(currentNavNodes[i+1]->GetVolume());
+    //
+	// 	if(!success){
+	// 		cout << "Can't find daughter matrix '" << currentNavNodes[i+1]->GetName() << "' of '" << currentNavNodes[i]->GetName() << "'!"<< endl;
+	// 		continue;
+	// 	}
+    //
+	// 	TGeoHMatrix* matr = gGeoManager->GetCurrentMatrix();
+	// 	const Double_t* rotationLocal =  matr->GetRotationMatrix();
+    //
+	// 	navigator->LocalToMaster(rotationLocal, rotationGlobal);
+    //
+	// 	for(int i=0;i<9;i++)
+	// 		cout << "local mat[" << (i % 3) << "," << (i / 3) << "] = " << rotationLocal[i] << endl;
+    //
+	// 	for(int i=0;i<9;i++)
+	// 		cout << "global mat[" << (i % 3) << "," << (i / 3) << "] = " << rotationGlobal[i] << endl;
+	// }
+
+
+	// const Double_t* rotationLocal = _node->GetMatrix()->GetRotationMatrix();
+	// Double_t rotationGlobal[9] = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
+	// navigator->LocalToMaster(rotationLocal, rotationGlobal);
+
+	// for(int i=0;i<9;i++)
+	// 	cout << "mat[" << (i % 3) << "," << (i / 3) << "] = " << rotationGlobal[i] << endl;
+
+	TGeoRotation* rot = new TGeoRotation(*gGeoManager->GetCurrentMatrix());
+	const Double_t* rotationGlobal = rot->GetRotationMatrix();
+
+	myX = TVector3(EcalFunctions::Round(rotationGlobal[0], 3), EcalFunctions::Round(rotationGlobal[3], 3), EcalFunctions::Round(rotationGlobal[6], 3));
+	myY = TVector3(EcalFunctions::Round(rotationGlobal[1], 3), EcalFunctions::Round(rotationGlobal[4], 3), EcalFunctions::Round(rotationGlobal[7], 3));
+	myZ = TVector3(EcalFunctions::Round(rotationGlobal[2], 3), EcalFunctions::Round(rotationGlobal[5], 3), EcalFunctions::Round(rotationGlobal[8], 3));
+
+
+	// I don't think this is needed, but just to be sure
+	myX *= 1./myX.Mag();
+	myY *= 1./myY.Mag();
+	myZ *= 1./myZ.Mag();
+
 
 	// Set Euler angles
 	double _phi = 0.;
 	double _theta = 0.;
 	double _psi = 0.;
-
-	TGeoRotation* rot = new TGeoRotation(*_node->GetMatrix());
 	rot->GetAngles(_phi, _theta, _psi);
 
-	phi = float(round(_phi)/1000.);
-	theta = float(round(_theta)/1000.);
-	psi = float(round(_psi)/1000.);
+	phi = EcalFunctions::Round(_phi, 3);
+	theta = EcalFunctions::Round(_theta, 3);
+	psi = EcalFunctions::Round(_psi, 3);
 }
 
 
@@ -251,7 +332,7 @@ void EcalHit::Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator){
 void EcalHit::Print(){
 	cout << "EcalHit: E = " << E << ", x = " << x << " +- " << dx << ", y = " << y << " +- " << dy << ", z = " << z << " +- " << dz << endl;
 	cout << "         eulerPhi = " << phi << ", eulerTheta = " << theta << ", eulerPsi = " << psi << endl;
-	cout << "         phi = " << direction.Phi() << ", theta = " << direction.Theta() << endl;
+	cout << "         phi = " << point.Phi() << ", theta = " << point.Theta() << endl;
 	cout << "         pos = " << GetPositionKey() << endl;
 }
 
@@ -289,17 +370,9 @@ void EcalHit::Add(EcalHit* hit){
 
 
 TString EcalHit::GetPositionKey(){
-	float useX = x; // round(x*1000.) / 1000.;
-	float useY = y; // round(y*1000.) / 1000.;
-	float useZ = z; // round(z*1000.) / 1000.;
-
-	// hack to avoid "-0" in the string
-	if(useX == 0.)
-		useX = 0.;
-	if(useY == 0.)
-		useY = 0.;
-	if(useZ == 0.)
-		useZ = 0.;
+	float useX = x;
+	float useY = y;
+	float useZ = z;
 
 	TString key = EcalFunctions::ToString(useX) + "_" + EcalFunctions::ToString(useY) + "_" + EcalFunctions::ToString(useZ);
 

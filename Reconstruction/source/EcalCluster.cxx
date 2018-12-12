@@ -18,18 +18,8 @@ float EcalCluster::static_z = 0.;
 EcalCluster::EcalCluster(){
 	E = 0.;
 
-	x = 0.;
-	y = 0.;
-	z = 0.;
-
-	// dx = 0.;
-	// dy = 0.;
-	// dz = 0.;
-
+	point = TVector3();
 	direction = TVector3();
-
-	phi = 0.;
-	theta = 0.;
 
 	hits.clear();
 }
@@ -42,18 +32,8 @@ EcalCluster::EcalCluster(EcalHit* hit) : EcalCluster(){
 EcalCluster::EcalCluster(const EcalCluster& cluster){
 	E = cluster.E;
 
-	x = cluster.x;
-	y = cluster.y;
-	z = cluster.z;
-
-	// dx = cluster.dx;
-    // dy = cluster.dy;
-	// dz = cluster.dz;
-
+	point = cluster.point;
 	direction = cluster.direction;
-
-	phi = cluster.phi;
-	theta = cluster.theta;
 
 	hits = cluster.hits;
 }
@@ -74,12 +54,12 @@ void EcalCluster::AddCluster(EcalCluster* cluster){
 	for(const auto& hit : cluster->hits)
 		AddHit(hit);
 
-	ComputeEtaPhiE();
+	ComputeDirection();
 }
 
 
 
-void EcalCluster::ComputeEtaPhiE()
+void EcalCluster::ComputeDirection()
 {
 	E = 0.;
 
@@ -94,9 +74,6 @@ void EcalCluster::ComputeEtaPhiE()
 		E += _E;
 
 		sow += _E;
-		// center_x += hit->GetOriginalX() * _E;
-		// center_y += hit->GetOriginalY() * _E;
-		// center_z += hit->GetOriginalZ() * _E;
 		center_x += hit->GetX() * _E;
 		center_y += hit->GetY() * _E;
 		center_z += hit->GetZ() * _E;
@@ -106,96 +83,190 @@ void EcalCluster::ComputeEtaPhiE()
 	center_y /= sow;
 	center_z /= sow;
 
-	x = center_x;
-	y = center_y;
-	z = center_z;
-	// dx = 0.;
-	// dy = 0.;
-	// dz = 0.;
+	point = TVector3(center_x, center_y, center_z);
 
+	if(hits.size() > 2){
+		direction = GetSimpleDirection();
+		// direction = GetFittedDirection();
+	}else if(hits.size() == 2){
+		direction = hits[0]->GetPoint() - hits[1]->GetPoint();
+		direction *= 1./direction.Mag();
+	}else if(hits.size() == 1){
+		direction = TVector3(point);
+		direction *= 1./direction.Mag();
+	}else
+		direction = TVector3();
 
-	// Now calculate direction
-	EcalCluster::staticHits = hits;
-	EcalCluster::static_x = x;
-	EcalCluster::static_y = y;
-	EcalCluster::static_z = z;
-
-	TVector3 guessDirection = TVector3(x,y,z);
-	guessDirection *= 1. / guessDirection.Mag();
-
-	phi = guessDirection.Phi();
-	theta = guessDirection.Theta();
-
-	ROOT::Minuit2::Minuit2Minimizer min( ROOT::Minuit2::kMigrad );
-	//ROOT::Math::GSLSimAnMinimizer min;
-
-	min.SetMaxFunctionCalls(1000000);
-	min.SetMaxIterations(100000);
-	min.SetTolerance(0.001);
-
-	ROOT::Math::Functor f(&EcalCluster::GetWeight,3);
-	double step[3] = {0.001,0.001,0.001};
-	double variable[3] = { guessDirection.X(), guessDirection.Y(), guessDirection.Z()};
-
-	min.SetFunction(f);
-
-	// Set the free variables to be minimized!
-	min.SetVariable(0,"x",variable[0], step[0]);
-	min.SetVariable(1,"y",variable[1], step[1]);
-	min.SetVariable(2,"z",variable[2], step[2]);
-
-	min.Minimize();
-
-	const double *xs = min.X();
-	cout << "Minimum: f(" << xs[0] << "," << xs[1] << "," << xs[2] << "): " << EcalCluster::GetWeight(xs) << endl;
-
-	direction = TVector3(xs[0], xs[1], xs[2]);
-	direction *= E / direction.Mag();
-
-
-
-	// phi = guessDirection.Phi();
-	// theta = guessDirection.Theta();
-
-
-
-	// TVector3 pos = TVector3(x,y,z);
-    //
-	// phi = pos.Phi();
-	// theta = pos.Theta();
-	// direction.SetMagThetaPhi(E, theta, phi);
 
 	// Print();
 }
 
 
+TVector3 EcalCluster::GetSimpleDirection(){
+	// Now calculate direction
+
+	float bestPhi = -1.;
+	float bestTheta = -1.;
+	float minWeight = 0.;
+
+	for(float phi = 0.;phi<2.*TMath::Pi();phi += 0.1){
+		for(float theta = 0.;theta<TMath::Pi();theta += 0.1){
+			TVector3 dir;
+			dir.SetMagThetaPhi(1., theta, phi);
+
+			float w = 0.;
+
+			for(const auto& hit :hits){
+				float E_hit = hit->GetE();
+				TVector3 dist = dir.Cross(point - hit->GetPoint());
+				w += E_hit*E_hit * dist.Mag2();
+			}
+
+			if(w < minWeight || bestPhi < 0.){
+				bestPhi = phi;
+				bestTheta = theta;
+				minWeight = w;
+			}
+		}
+	}
+
+
+	TVector3 result;
+	result.SetMagThetaPhi(1., bestTheta, bestPhi);
+
+	return result;
+}
+
+TVector3 EcalCluster::GetFittedDirection(){
+	// Now calculate direction
+	EcalCluster::staticHits = hits;
+	EcalCluster::static_x = point.X();
+	EcalCluster::static_y = point.Y();
+	EcalCluster::static_z = point.Z();
+
+	ROOT::Minuit2::Minuit2Minimizer min( ROOT::Minuit2::kMigrad );
+
+	min.SetMaxFunctionCalls(1000000);
+	min.SetMaxIterations(100000);
+	min.SetTolerance(0.001);
+
+	ROOT::Math::Functor f(&EcalCluster::GetWeight,2);
+	min.SetFunction(f);
+
+	double stepSize = 0.01;
+
+	// Set the free variables to be minimized!
+	min.SetLimitedVariable(0, "phi", 0, stepSize, 0., 2.*TMath::Pi());
+	min.SetLimitedVariable(1, "theta", 0, stepSize, 0., TMath::Pi());
+
+	bool success = min.Minimize();
+
+	TVector3 result;
+
+	if(success){
+		const double *xs = min.X();
+		result.SetMagThetaPhi(1., xs[1], xs[0]);
+	}else{
+		cout << "Problem fitting direction of cluster!" << endl;
+	}
+
+	return result;
+}
+
 
 double EcalCluster::GetWeight(const double *xx){
 	double L = 0.;
 
-	TVector3 d = TVector3(xx[0], xx[1], xx[2]);
+	// calculate and add up orthogonal distance to line for each hit
+	// this value will be minimized to find best fit
+
+	float phi = xx[0];
+	float theta = xx[1];
+
+	TVector3 dir;
+	dir.SetMagThetaPhi(1., theta, phi);
+
 	TVector3 s = TVector3(static_x, static_y, static_z);
-	float d_mag2 = d.Mag2();
 
 	for(const auto& hit : EcalCluster::staticHits){
 		float E_hit = hit->GetE();
-
-		TVector3 p = TVector3(hit->GetX(), hit->GetY(), hit->GetZ());
-		TVector3 dist = d.Cross(s - p);
-
-		L += E_hit*E_hit / d_mag2 * d.Mag2();
+		TVector3 dist = dir.Cross(s - hit->GetPoint());
+		L += E_hit*E_hit * dist.Mag2();
 	}
 
 	return L;
 }
 
 
+// TVector3 EcalCluster::GetFittedDirection(){
+// 	// Now calculate direction
+// 	EcalCluster::staticHits = hits;
+// 	EcalCluster::static_x = point.X();
+// 	EcalCluster::static_y = point.Y();
+// 	EcalCluster::static_z = point.Z();
+//
+// 	ROOT::Minuit2::Minuit2Minimizer min( ROOT::Minuit2::kMigrad );
+//
+// 	TVector3 guessDirection = TVector3(point);
+// 	guessDirection *= 1. / guessDirection.Mag();
+//
+// 	min.SetMaxFunctionCalls(1000000);
+// 	min.SetMaxIterations(100000);
+// 	min.SetTolerance(0.001);
+//
+// 	ROOT::Math::Functor f(&EcalCluster::GetWeight,3);
+// 	double step[3] = {0.01,0.01,0.01};
+// 	double variable[3] = { guessDirection.X(), guessDirection.Y(), guessDirection.Z()};
+//
+// 	min.SetFunction(f);
+//
+// 	// Set the free variables to be minimized!
+// 	min.SetVariable(0,"x",variable[0], step[0]);
+// 	min.SetVariable(1,"y",variable[1], step[1]);
+// 	min.SetVariable(2,"z",variable[2], step[2]);
+//
+// 	min.Minimize();
+//
+// 	const double *xs = min.X();
+//
+// 	TVector3 result = TVector3(xs[0], xs[1], xs[2]);
+// 	result *= 1. / result.Mag();
+//
+// 	return result;
+// }
+//
+//
+// double EcalCluster::GetWeight(const double *xx){
+// 	double L = 0.;
+//
+// 	// calculate and add up orthogonal distance to line for each hit
+// 	// this value will be minimized to find best fit
+//
+// 	TVector3 d = TVector3(xx[0], xx[1], xx[2]);
+// 	TVector3 s = TVector3(static_x, static_y, static_z);
+// 	float d_mag2 = d.Mag2();
+//
+// 	for(const auto& hit : EcalCluster::staticHits){
+// 		float E_hit = hit->GetE();
+//
+// 		//TVector3 p = TVector3(hit->GetX(), hit->GetY(), hit->GetZ());
+// 		TVector3 p = TVector3(hit->GetX() / hit->GetDX(), hit->GetY() / hit->GetDY(), hit->GetZ() / hit->GetDZ());
+//
+// 		TVector3 dist = d.Cross(s - p);
+//
+// 		L += E_hit*E_hit / d_mag2 * dist.Mag2();
+// 	}
+//
+// 	return L;
+// }
+
+
 
 void EcalCluster::Print()
 {
 	// cout << "EcalCluster: E = " << E << ", x = " << x << " +- " << dx << ", y = " << y << " +- " << dy << ", z = " << z << " +- " << dz << endl;
-	cout << "EcalCluster: E = " << E << ", x = " << x << ", y = " << y << ", z = " << z << endl;
-	cout << "             phi = " << phi << ", theta = " << theta << endl;
+	cout << "EcalCluster: E = " << E << ", x = " << GetX() << ", y = " << GetY() << ", z = " << GetZ() << endl;
+	cout << "             phi = " << GetPhi() << ", theta = " << GetTheta() << endl;
 	cout << "             direction: phi = " << direction.Phi() << ", theta = " << direction.Theta() << endl;
 	cout << "             dist to origin = " << GetDistToOrigin() << endl;
 }
@@ -205,26 +276,31 @@ vector<EcalCluster*> EcalCluster::GetClusters(std::vector<EcalHit*> hits){
 
 	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
 
-	vector<EcalCluster*> clusters; // = GetAntiKtClusters(hits);
-
-	EcalCluster* cluster = new EcalCluster();
-	for(const auto& hit : hits)
-		cluster->AddHit(hit);
-
-	cluster->ComputeEtaPhiE();
-
-	clusters.push_back(cluster);
+	vector<EcalCluster*> clusters = GetSimpleClusters(hits);
+	// vector<EcalCluster*> clusters = GetAntiKtClusters(hits);
 
 	return clusters;
 }
 
 
 float EcalCluster::GetDistToOrigin(){
-	TVector3 center = TVector3(x,y,z);
-	TVector3 dist = direction.Cross(center);
-	dist *= 1./direction.Mag();
-
+	TVector3 dist = direction.Cross(point);
 	return dist.Mag();
+}
+
+
+vector<EcalCluster*> EcalCluster::GetSimpleClusters(std::vector<EcalHit*> hits){
+	vector<EcalCluster*> clusters;
+
+	EcalCluster* cluster = new EcalCluster();
+	for(const auto& hit : hits)
+		cluster->AddHit(hit);
+
+	cluster->ComputeDirection();
+
+	clusters.push_back(cluster);
+
+	return clusters;
 }
 
 
@@ -233,7 +309,7 @@ vector<EcalCluster*> EcalCluster::GetAntiKtClusters(std::vector<EcalHit*> hits, 
 
 	for(const auto& hit : hits){
 		EcalCluster* ec = new EcalCluster(hit);
-		ec->ComputeEtaPhiE();
+		ec->ComputeDirection();
 		clusters.push_back(ec);
 	}
 
@@ -279,7 +355,7 @@ vector<EcalCluster*> EcalCluster::GetAntiKtClusters(std::vector<EcalHit*> hits, 
 
 float EcalCluster::GetAntiKtDistance(EcalCluster* cluster, double p){
 	double k = min(TMath::Power(this->E, p), TMath::Power(cluster->E, p));
-	float d = this->direction.DeltaR(cluster->direction) / EcalCluster::AntiKtRadius;
+	float d = this->GetPoint().DeltaR(cluster->GetPoint()) / EcalCluster::AntiKtRadius;
 
 	return k * d;
 }

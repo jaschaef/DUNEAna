@@ -6,6 +6,7 @@
 #include <TStyle.h>
 #include "TCanvas.h"
 #include "TH2F.h"
+#include "TH3F.h"
 
 #include "iostream"
 #include "sstream"
@@ -21,12 +22,20 @@ public:
 	~EcalFunctions();
 
 	void MakeThetaPhiMap(TString savename, std::vector<EcalHit*> hits);
+	void MakeThetaPhiMap(TString savename, std::vector<EcalCluster*> clusters, std::vector<std::pair<float,float> > extraPoints);
 	void MakeThetaPhiMap(TString savename, std::vector<EcalCluster*> clusters);
 	// void MakeThetaPhiMap(TString savename, std::vector<float> Phi, std::vector<float> Theta, std::vector<float> E);
 
 	TH2F* GetThetaPhiHistogram(std::vector<float> Phi, std::vector<float> Theta, std::vector<float> E);
 	void DrawHistogram(TString savename, TH2F* hist);
+	void DrawHistograms(TString savename, std::vector<TH2F*> hists, std::vector<TH2F*> extraHists);
 	void DrawHistograms(TString savename, std::vector<TH2F*> hists);
+
+	void DrawEventDisplay(TString savename, std::vector<EcalCluster*> clusters);
+
+	int GetColor(int index);
+
+	static float Round(float f, int n);
 
 
 	// static TString GetNavigatorPath(TGeoNode* _node, TGeoNode* _masterNode, TString _result = "");

@@ -58,9 +58,9 @@ public:
 	float GetEulerTheta(){return theta;}
 	float GetEulerPsi(){return psi;}
 
-	float GetPhi(){return direction.Phi();}
-	float GetTheta(){return direction.Theta();}
-	TVector3 GetDirection(){return direction;}
+	float GetPhi(){return point.Phi();}
+	float GetTheta(){return point.Theta();}
+	TVector3 GetPoint(){return point;}
 
 	float GetOriginalX(){return x_orig;}
 	float GetOriginalY(){return y_orig;}
@@ -68,7 +68,7 @@ public:
 
 
  private:
-	void Initialize(float _E, TGeoNode* _node, TGeoNavigator* navigator);
+	void Initialize(float _E, TGeoNode* _node); // Navigator needs to be set to the current node before calling this! //, TGeoNavigator* navigator = 0
 	TString GetPositionKey();
 
 
@@ -76,13 +76,17 @@ private:
 	float E;
 
 	// absolute positioning
-	TVector3 direction;
+	TVector3 point;
 	float x, dx;
 	float y, dy;
 	float z, dz;
 
 	// euler angles
 	float phi, theta, psi;
+
+	// base in global coordinates
+	// can be used to check neighbors in all directions
+	TVector3 myX, myY, myZ;
 
 
 public:
