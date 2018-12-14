@@ -8,7 +8,7 @@
 using namespace std;
 
 float EcalCluster::energyThreshold = 0.;
-float EcalCluster::AntiKtRadius = 0.1;
+float EcalCluster::clusterRadius = 0.1;
 std::vector<EcalHit*> EcalCluster::staticHits = {};
 float EcalCluster::static_x = 0.;
 float EcalCluster::static_y = 0.;
@@ -20,6 +20,8 @@ EcalCluster::EcalCluster(){
 
 	point = TVector3();
 	direction = TVector3();
+
+	isMerged = false;
 
 	hits.clear();
 }
@@ -34,6 +36,8 @@ EcalCluster::EcalCluster(const EcalCluster& cluster){
 
 	point = cluster.point;
 	direction = cluster.direction;
+
+	isMerged = cluster.isMerged;
 
 	hits = cluster.hits;
 }
@@ -271,16 +275,16 @@ void EcalCluster::Print()
 	cout << "             dist to origin = " << GetDistToOrigin() << endl;
 }
 
-vector<EcalCluster*> EcalCluster::GetClusters(std::vector<EcalHit*> hits){
-	//TODO: Everything
-
-	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
-
-	vector<EcalCluster*> clusters = GetSimpleClusters(hits);
-	// vector<EcalCluster*> clusters = GetAntiKtClusters(hits);
-
-	return clusters;
-}
+// vector<EcalCluster*> EcalCluster::GetClusters(std::vector<EcalHit*> hits){
+// 	//TODO: Everything
+//
+// 	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
+//
+// 	vector<EcalCluster*> clusters = GetSimpleClusters(hits);
+// 	// vector<EcalCluster*> clusters = GetAntiKtClusters(hits);
+//
+// 	return clusters;
+// }
 
 
 float EcalCluster::GetDistToOrigin(){
@@ -291,6 +295,8 @@ float EcalCluster::GetDistToOrigin(){
 
 vector<EcalCluster*> EcalCluster::GetSimpleClusters(std::vector<EcalHit*> hits){
 	vector<EcalCluster*> clusters;
+
+	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
 
 	EcalCluster* cluster = new EcalCluster();
 	for(const auto& hit : hits)
@@ -304,8 +310,114 @@ vector<EcalCluster*> EcalCluster::GetSimpleClusters(std::vector<EcalHit*> hits){
 }
 
 
+vector<EcalCluster*> EcalCluster::GetNeighborClustersInDirection(std::vector<EcalHit*> hits, NeighborDirection direction, bool resetNeighborhood){
+
+	vector<EcalCluster*> clusters;
+
+	if(resetNeighborhood){
+		for(const auto& hit : hits)
+			hit->ResetNeighborhood();
+	}
+
+	for(const auto& hit : hits){
+		if(hit->IsInNeighborHood())
+			continue;
+
+		vector<EcalHit*> neighbors = hit->GetNeighbors(hits, direction);
+
+		// neighbors can be empty if the strip is in the wrong direction
+		if(neighbors.size() > 0){
+			EcalCluster* cluster = new EcalCluster();
+			for(const auto& nb : neighbors)
+				cluster->AddHit(hit);
+
+			cluster->ComputeDirection();
+			clusters.push_back(cluster);
+		}
+	}
+
+	return clusters;
+}
+
+
+vector<EcalCluster*> EcalCluster::GetNeighborClusters(std::vector<EcalHit*> hits){
+	vector<EcalCluster*> clusters;
+
+
+	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
+
+	vector<EcalCluster*> clustersX = GetNeighborClustersInDirection(hits, NeighborDirection::X, true);
+	vector<EcalCluster*> clustersY = GetNeighborClustersInDirection(hits, NeighborDirection::Y, true);
+	// vector<EcalCluster*> clustersZ = GetNeighborClustersInDirection(hits, NeighborDirection::Z, true);
+
+	cout << "Found clustersX: " << clustersX.size() << endl;
+	cout << "Found clustersY: " << clustersY.size() << endl;
+
+	unsigned int notClustered = 0;
+	for(const auto& hit : hits)
+		if(!hit->IsInNeighborHood())
+			notClustered += 1;
+
+	cout << notClustered << " cells have not been clustered!" << endl;
+
+	vector<EcalCluster*> clustersXMerged = MergeClusters(clustersX);
+	vector<EcalCluster*> clustersYMerged = MergeClusters(clustersY);
+
+	for(const auto& cluster : clustersXMerged)
+		clusters.push_back(cluster);
+	for(const auto& cluster : clustersYMerged)
+		clusters.push_back(cluster);
+
+	return clusters;
+}
+
+
+vector<EcalCluster*> EcalCluster::MergeClusters(std::vector<EcalCluster*> clusters){
+	vector<EcalCluster*> mergedClusters;
+
+	// this might need some additional logic, if the strips are shorter than the full detector length
+
+	float maxDist = EcalCluster::clusterRadius*EcalCluster::clusterRadius;
+
+	sort(clusters.begin(), clusters.end(), EcalFunctions::Energy_sort());
+
+	while(clusters.size() > 0){
+		unsigned int minIndex = 0;
+		float minR2 = maxDist;
+
+		for(unsigned int i=1;i<clusters.size();i++){
+			float r2 = (clusters[0]->point-clusters[i]->point).Mag2();
+
+			if(r2 > minR2)
+				continue;
+
+			minR2 = r2;
+			minIndex = (int) i;
+		}
+
+
+		if(minIndex > 0){
+			clusters[0]->AddCluster(clusters[minIndex]);
+			delete clusters[minIndex];
+			clusters.erase(clusters.begin() + minIndex);
+			sort(clusters.begin(), clusters.end(), EcalFunctions::Energy_sort());
+		}else{
+			mergedClusters.push_back(clusters[0]);
+			clusters.erase(clusters.begin() + 0);
+		}
+	}
+
+
+	return mergedClusters;
+}
+
+
+
+
 vector<EcalCluster*> EcalCluster::GetAntiKtClusters(std::vector<EcalHit*> hits, double p){
 	vector<EcalCluster*> clusters;
+
+	sort(hits.begin(), hits.end(), EcalFunctions::Energy_sort());
 
 	for(const auto& hit : hits){
 		EcalCluster* ec = new EcalCluster(hit);
@@ -340,6 +452,7 @@ vector<EcalCluster*> EcalCluster::GetAntiKtClusters(std::vector<EcalHit*> hits, 
 			clusters[0]->AddCluster(clusters[minIndex]);
 			delete clusters[minIndex];
 			clusters.erase(clusters.begin() + minIndex);
+			sort(clusters.begin(), clusters.end(), EcalFunctions::Energy_sort());
 		}else{
 			mergedClusters.push_back(clusters[0]);
 			clusters.erase(clusters.begin() + 0);
@@ -355,7 +468,7 @@ vector<EcalCluster*> EcalCluster::GetAntiKtClusters(std::vector<EcalHit*> hits, 
 
 float EcalCluster::GetAntiKtDistance(EcalCluster* cluster, double p){
 	double k = min(TMath::Power(this->E, p), TMath::Power(cluster->E, p));
-	float d = this->GetPoint().DeltaR(cluster->GetPoint()) / EcalCluster::AntiKtRadius;
+	float d = this->GetPoint().DeltaR(cluster->GetPoint()) / EcalCluster::clusterRadius;
 
 	return k * d;
 }

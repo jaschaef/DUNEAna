@@ -14,6 +14,12 @@
 
 #include "iostream"
 
+enum NeighborDirection{
+	X,
+	Y,
+	Z
+};
+
 
 class EcalHit
 {
@@ -66,6 +72,12 @@ public:
 	float GetOriginalY(){return y_orig;}
 	float GetOriginalZ(){return z_orig;}
 
+	std::vector<EcalHit*> GetNeighbors(std::vector<EcalHit*> otherhits, NeighborDirection direction);
+	void SetInNeighborhood(){isInNeighborhood = true;}
+	void ResetNeighborhood(){isInNeighborhood = false;}
+	bool IsInNeighborHood(){return isInNeighborhood;}
+	bool IsInDirection(NeighborDirection direction);
+
 
  private:
 	void Initialize(float _E, TGeoNode* _node); // Navigator needs to be set to the current node before calling this! //, TGeoNavigator* navigator = 0
@@ -88,11 +100,15 @@ private:
 	// can be used to check neighbors in all directions
 	TVector3 myX, myY, myZ;
 
+	bool isInNeighborhood;
+
 
 public:
 	static bool useOriginalPositions;
 	static float energyThreshold;
 	static bool transformInput;
+
+	static float neighborDistance;
 
 	float x_orig, y_orig, z_orig;
 

@@ -7,6 +7,7 @@ using namespace std;
 bool EcalHit::useOriginalPositions = false;
 float EcalHit::energyThreshold = 0.;
 bool EcalHit::transformInput = false;
+float EcalHit::neighborDistance = 2.;
 
 
 EcalHit::EcalHit(float _E, double _x, double _y, double _z){
@@ -16,7 +17,7 @@ EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 		return;
 	}
 
-	// cout << "Found Node: " << _node->GetName() << endl;
+	cout << "Found Node: " << _node->GetName() << endl;
 
 	// TString nodePath = gGeoManager->GetPath();
     //
@@ -25,6 +26,8 @@ EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 	// 	cout << endl << "Can't find navigator!" << endl;
 	// 	return;
 	// }
+
+	isInNeighborhood = false;
 
 	x_orig = _x;
 	y_orig = _y;
@@ -39,8 +42,7 @@ EcalHit::EcalHit(float _E, double _x, double _y, double _z){
 
 	Initialize(_E, _node);
 
-	// navigator->cd(naviPath);
-	// Initialize(_E, _node, navigator);
+	// Print();
 }
 
 
@@ -50,6 +52,8 @@ EcalHit::EcalHit(float _E, TGeoNode* _node, TString _navigatorPath){
 		cout << endl << "Can't find navigator!" << endl;
 		return;
 	}
+
+	isInNeighborhood = false;
 
 	navigator->cd(_navigatorPath);
 	navigator->CdDown(_node);
@@ -106,6 +110,7 @@ EcalHit::EcalHit(const EcalHit& ecalHit){
 	E = ecalHit.E;
 
 	point = TVector3(ecalHit.point);
+	isInNeighborhood = ecalHit.isInNeighborhood;
 
 	x = ecalHit.x;
 	y = ecalHit.y;
@@ -123,6 +128,9 @@ EcalHit::EcalHit(const EcalHit& ecalHit){
 	theta = ecalHit.theta;
 	psi = ecalHit.psi;
 
+	myX = TVector3(ecalHit.myX);
+	myY = TVector3(ecalHit.myY);
+	myZ = TVector3(ecalHit.myZ);
 }
 
 
@@ -132,6 +140,8 @@ EcalHit::EcalHit(float _E,
 					float _phi, float _theta, float _psi
 				){
 	E = _E;
+
+	isInNeighborhood = false;
 
 	x = _x;
 	y = _y;
@@ -150,6 +160,10 @@ EcalHit::EcalHit(float _E,
 	phi = _phi;
 	theta = _theta;
 	psi = _psi;
+
+	myX = TVector3(1, 0, 0);
+	myY = TVector3(0, 1, 0);
+	myZ = TVector3(0, 0, 1);
 }
 
 
@@ -184,7 +198,7 @@ void EcalHit::Initialize(float _E, TGeoNode* _node){ //, TGeoNavigator* navigato
 		// Double_t coordinatesGlobal[3] = {0.,0.,0.};
 		// navigator->LocalToMaster(coordinatesLocal, coordinatesGlobal);
 
-		// cout << "coordinatesLocal  = " << coordinatesLocal[0] << ", " << coordinatesLocal[1] << ", " << coordinatesLocal[2] << endl;
+		// cout << "coordinatesLocal  = " << coordinatesGlobal[0] << ", " << coordinatesGlobal[1] << ", " << coordinatesGlobal[2] << endl;
 		// cout << "coordinatesMaster = " << coordinatesMaster[0] << ", " << coordinatesMaster[1] << ", " << coordinatesMaster[2] << endl;
 
 		x = EcalFunctions::Round(coordinatesGlobal[0], 3);
@@ -277,10 +291,9 @@ void EcalHit::Initialize(float _E, TGeoNode* _node){ //, TGeoNavigator* navigato
 	TGeoRotation* rot = new TGeoRotation(*gGeoManager->GetCurrentMatrix());
 	const Double_t* rotationGlobal = rot->GetRotationMatrix();
 
-	myX = TVector3(EcalFunctions::Round(rotationGlobal[0], 3), EcalFunctions::Round(rotationGlobal[3], 3), EcalFunctions::Round(rotationGlobal[6], 3));
-	myY = TVector3(EcalFunctions::Round(rotationGlobal[1], 3), EcalFunctions::Round(rotationGlobal[4], 3), EcalFunctions::Round(rotationGlobal[7], 3));
-	myZ = TVector3(EcalFunctions::Round(rotationGlobal[2], 3), EcalFunctions::Round(rotationGlobal[5], 3), EcalFunctions::Round(rotationGlobal[8], 3));
-
+	myX = TVector3(EcalFunctions::Round(rotationGlobal[0], 6), EcalFunctions::Round(rotationGlobal[3], 6), EcalFunctions::Round(rotationGlobal[6], 6));
+	myY = TVector3(EcalFunctions::Round(rotationGlobal[1], 6), EcalFunctions::Round(rotationGlobal[4], 6), EcalFunctions::Round(rotationGlobal[7], 6));
+	myZ = TVector3(EcalFunctions::Round(rotationGlobal[2], 6), EcalFunctions::Round(rotationGlobal[5], 6), EcalFunctions::Round(rotationGlobal[8], 6));
 
 	// I don't think this is needed, but just to be sure
 	myX *= 1./myX.Mag();
@@ -331,8 +344,11 @@ void EcalHit::Initialize(float _E, TGeoNode* _node){ //, TGeoNavigator* navigato
 
 void EcalHit::Print(){
 	cout << "EcalHit: E = " << E << ", x = " << x << " +- " << dx << ", y = " << y << " +- " << dy << ", z = " << z << " +- " << dz << endl;
-	cout << "         eulerPhi = " << phi << ", eulerTheta = " << theta << ", eulerPsi = " << psi << endl;
-	cout << "         phi = " << point.Phi() << ", theta = " << point.Theta() << endl;
+	//cout << "         eulerPhi = " << phi << ", eulerTheta = " << theta << ", eulerPsi = " << psi << endl;
+	cout << "         myX = (" << myX.X() << "," << myX.Y() << "," << myX.Z() << ")" << endl;
+	cout << "         myY = (" << myY.X() << "," << myY.Y() << "," << myY.Z() << ")" << endl;
+	cout << "         myX = (" << myZ.X() << "," << myZ.Y() << "," << myZ.Z() << ")" << endl;
+	//cout << "         phi = " << point.Phi() << ", theta = " << point.Theta() << endl;
 	cout << "         pos = " << GetPositionKey() << endl;
 }
 
@@ -377,5 +393,135 @@ TString EcalHit::GetPositionKey(){
 	TString key = EcalFunctions::ToString(useX) + "_" + EcalFunctions::ToString(useY) + "_" + EcalFunctions::ToString(useZ);
 
 	return key;
+}
+
+
+bool EcalHit::IsInDirection(NeighborDirection direction){
+	cout << "IsInDirection " << direction << endl;
+	cout << "dx = " << dx << ", dy = " << dy << endl;
+
+	if(direction == NeighborDirection::X)
+		return dx < dy;
+	if(direction == NeighborDirection::Y)
+		return dx > dy;
+
+	return false;
+}
+
+
+vector<EcalHit*> EcalHit::GetNeighbors(vector<EcalHit*> otherhits, NeighborDirection direction){
+	vector<EcalHit*> neighbors;
+
+	// this is a strip in the other direction. Don't use it for this direction
+	if(!IsInDirection(direction))
+		return neighbors;
+
+	cout << "GetNeighbors for hit at " << point.X() << "/" << point.Y() << "/" << point.Z() << " in direction " << direction << endl;
+
+	// add the seed cell to the neighborhood
+	if(!IsInNeighborHood()){
+		neighbors.push_back(this);
+		SetInNeighborhood();
+	}
+
+	float ndSquare = EcalHit::neighborDistance*EcalHit::neighborDistance;
+
+	TVector3 dir1;
+	float l1;
+
+	if(direction == NeighborDirection::X){
+		dir1 = myX;
+		l1 = dx;
+	}else if(direction == NeighborDirection::Y){
+		dir1 = myY;
+		l1 = dy;
+	}else if(direction == NeighborDirection::Z){
+		dir1 = myZ;
+		l1 = dz;
+	}
+
+	cout << "         with direction " << dir1.X() << "/" << dir1.Y() << "/" << dir1.Z() << endl;
+
+	for(const auto& hit : otherhits){
+		if(hit->IsInNeighborHood() || !hit->IsInDirection(direction))
+			continue;
+
+		//bool isNeighbor = false;
+
+		cout << "  Testing hit at " << hit->point.X() << "/" << hit->point.Y() << "/" << hit->point.Z() << endl;
+
+		// check if central point is close enough
+		TVector3 diff = hit->point - this->point;
+		//
+		// // cout << "    -> diff = " << diff.X() << "/" << diff.Y() << "/" << diff.Z() << endl;
+		//
+		// float distDir = abs(dir1.Dot(diff));
+		// float distOrtho = abs(dir1.Cross(diff).Mag2());
+		//
+		// bool isOkayDir = distDir < EcalHit::neighborDistance;
+		// bool isOkayOrtho = distOrtho < ndSquare;
+		//
+		// isNeighbor = isOkayDir && isOkayOrtho;
+
+		// if(isNeighbor)
+		// 	cout << " -> simple neighbor " << " - > " << distDir << " / " << distOrtho << endl;
+
+		// check if box point is close enough
+		//if(!isNeighbor){
+		TVector3 dir2;
+		float l2;
+
+		if(direction == NeighborDirection::X){
+			dir2 = hit->myX;
+			l2 = hit->dx;
+		}else if(direction == NeighborDirection::Y){
+			dir2 = hit->myY;
+			l2 = hit->dy;
+		}else if(direction == NeighborDirection::Z){
+			dir2 = hit->myZ;
+			l2 = hit->dz;
+		}
+
+		float proj1 = dir1.Dot(diff);
+		TVector3 p1 = this->point + EcalFunctions::Sign(proj1) * dir1 * l1;
+
+		float proj2 = dir2.Dot(diff);
+		TVector3 p2 = hit->point - EcalFunctions::Sign(proj2) * dir2 * l2;
+
+		diff = p2 - p1;
+
+		bool isOkayDir = abs(dir1.Dot(diff)) < EcalHit::neighborDistance;
+		bool isOkayOrtho = abs(dir1.Cross(diff).Mag2()) < ndSquare;
+
+		bool isNeighbor = isOkayDir && isOkayOrtho;
+
+		// if(isNeighbor)
+		// 	cout << " -> box neighbor" << endl;
+
+		//float distSquar = (p1-p2).Mag2();
+		//isNeighbor = (distSquar < ndSquare);
+		//}
+
+		cout << " p1 = " << p1.X() << "/" << p1.Y() << "/" << p1.Z() << endl;
+		cout << " p2 = " << p2.X() << "/" << p2.Y() << "/" << p2.Z() << endl;
+
+		cout << " -> diff = " <<  diff.X() << "/" << diff.Y() << "/" << diff.Z() << " -> " << abs(dir1.Dot(diff)) << " / " << abs(dir1.Cross(diff).Mag2()) << endl;
+
+		if(isNeighbor){
+			hit->SetInNeighborhood();
+			neighbors.push_back(hit);
+
+			cout << "   => Neighbor! "<< endl;
+
+			vector<EcalHit*> moreNeighbors = hit->GetNeighbors(otherhits, direction);
+			for(const auto& mnh : moreNeighbors)
+				neighbors.push_back(mnh);
+		}
+	}
+
+	// cout << " Found " << neighbors.size() << " neighbors!" << endl;
+
+
+	return neighbors;
 }
 

@@ -40,9 +40,14 @@ public:
 
 	std::vector<EcalHit*> GetHits(){return hits;}
 
-	static std::vector<EcalCluster*> GetClusters(std::vector<EcalHit*> hits);
+	// static std::vector<EcalCluster*> GetClusters(std::vector<EcalHit*> hits);
 	static std::vector<EcalCluster*> GetSimpleClusters(std::vector<EcalHit*> hits);
+
 	static std::vector<EcalCluster*> GetAntiKtClusters(std::vector<EcalHit*> hits, double p = -2.);
+
+	static std::vector<EcalCluster*> GetNeighborClusters(std::vector<EcalHit*> hits);
+	static std::vector<EcalCluster*> GetNeighborClustersInDirection(std::vector<EcalHit*> hits, NeighborDirection direction, bool resetNeighborhood);
+	static std::vector<EcalCluster*> MergeClusters(std::vector<EcalCluster*> clusters);
 
 	TVector3 GetFittedDirection();
 	TVector3 GetSimpleDirection();
@@ -62,9 +67,11 @@ private:
 
 	std::vector<EcalHit*> hits;
 
+	bool isMerged;
+
 public:
 	static float energyThreshold;
-	static float AntiKtRadius;
+	static float clusterRadius;
 	static std::vector<EcalHit*> staticHits;
 	static float static_x;
 	static float static_y;

@@ -21,6 +21,8 @@ int main(int argc, char* argv[]) {
 	//    return 1;
 	// }
 
+	bool doSimpleTest = true;
+
 	TString geoFile = "../input/ND_Strawman_Concept_v01.root";
 	bool saveGeoManager = false;
 
@@ -28,10 +30,11 @@ int main(int argc, char* argv[]) {
 	EcalHit::useOriginalPositions = false;
 	EcalHit::energyThreshold = 0.;
 	EcalHit::transformInput = false;
+	EcalHit::neighborDistance = 0.25;
 
 	//EcalCluster static values
 	EcalCluster::energyThreshold = 0.;
-	EcalCluster::AntiKtRadius = 0.05;
+	EcalCluster::clusterRadius = 0.5;
 
 
 
@@ -75,47 +78,67 @@ int main(int argc, char* argv[]) {
 	vector<EcalHit*> cells;
 	vector<EcalCluster*> clusters;
 
-	bool doSimpleTest = false;
+
 
 	if(!doSimpleTest){
 		TGeoNode* currentNode = geom->GetTopNode();
-		// cout << "curr = " << currentNode->GetName() << endl;
+
+		vector<EcalHit*> hits;
 
 		TString nodeName = "BarrelECal_stave_module_layer_3_slice1_vol_0";
 		TString baseName = "volNDHPgTPC_0/BarrelECal_vol_0/BarrelECal_stave_vol_0/BarrelECal_stave_module_layer_3_vol_0/";
 		TGeoNode* node = func->GetNode(baseName+nodeName);
 		EcalHit* hit = new EcalHit(10, node, "volWorld_1/"+baseName);
-		hit->Print();
-		cells.push_back(hit);
+		// hit->Print();
+		// hits.push_back(hit);
 
 		nodeName = "BarrelECal_stave_module_layer_40_slice1_vol_0";
 		baseName = "volNDHPgTPC_0/BarrelECal_vol_0/BarrelECal_stave_vol_0/BarrelECal_stave_module_layer_40_vol_0/";
 		node = func->GetNode(baseName+nodeName);
 		hit = new EcalHit(10, node, "volWorld_1/"+baseName);
 		hit->Print();
-		cells.push_back(hit);
+		hits.push_back(hit);
 
 		nodeName = "BarrelECal_stave_module_layer_40_slice2_vol_0";
 		baseName = "volNDHPgTPC_0/BarrelECal_vol_0/BarrelECal_stave_vol_0/BarrelECal_stave_module_layer_40_vol_0/";
 		node = func->GetNode(baseName+nodeName);
 		hit = new EcalHit(10, node, "volWorld_1/"+baseName);
 		hit->Print();
-		cells.push_back(hit);
+		hits.push_back(hit);
 
-
-		nodeName = "EndcapECal_stave_module_layer_40_slice3_vol_0";
-		baseName = "volNDHPgTPC_0/EndcapECal_vol_0/EcalEndcapStave_vol_0/EndcapECal_stave_module_layer_40_vol_0/";
+		nodeName = "BarrelECal_stave_module_layer_40_slice3_vol_0";
+		baseName = "volNDHPgTPC_0/BarrelECal_vol_0/BarrelECal_stave_vol_0/BarrelECal_stave_module_layer_40_vol_0/";
 		node = func->GetNode(baseName+nodeName);
 		hit = new EcalHit(10, node, "volWorld_1/"+baseName);
 		hit->Print();
-		cells.push_back(hit);
+		hits.push_back(hit);
 
-		hit = new EcalHit(10, 316.34, 0, 0);
+		nodeName = "BarrelECal_stave_module_layer_39_slice3_vol_0";
+		baseName = "volNDHPgTPC_0/BarrelECal_vol_0/BarrelECal_stave_vol_0/BarrelECal_stave_module_layer_39_vol_0/";
+		node = func->GetNode(baseName+nodeName);
+		hit = new EcalHit(10, node, "volWorld_1/"+baseName);
 		hit->Print();
-		cells.push_back(hit);
+		hits.push_back(hit);
+
+		// nodeName = "EndcapECal_stave_module_layer_40_slice3_vol_0";
+		// baseName = "volNDHPgTPC_0/EndcapECal_vol_0/EcalEndcapStave_vol_0/EndcapECal_stave_module_layer_40_vol_0/";
+		// node = func->GetNode(baseName+nodeName);
+		// hit = new EcalHit(10, node, "volWorld_1/"+baseName);
+		// hit->Print();
+		// hits.push_back(hit);
+        //
+		// hit = new EcalHit(10, 316.34, 0, 0);
+		// hit->Print();
+		// hits.push_back(hit);
 
 
-		clusters = EcalCluster::GetAntiKtClusters(cells);
+		cells = EcalHit::AddCells(hits);
+		cout << "Merged " << hits.size() << " hits to " << cells.size() << " cells." << endl;
+
+		clusters = EcalCluster::GetNeighborClusters(cells);
+		cout << "Merged " << cells.size() << " cells to " << clusters.size() << " clusters." << endl;
+
+
 
 		// EcalCluster* cluster = new EcalCluster();
 		// for(const auto& h : cells)
@@ -124,8 +147,6 @@ int main(int argc, char* argv[]) {
 		// clusters.push_back(cluster);
 
 	}else{
-
-
 		std::vector<EcalHit*> debugHits_50;
 		EcalHit* debugHit = 0;
 
@@ -513,15 +534,16 @@ int main(int argc, char* argv[]) {
 		debugHits_500.push_back(debugHit);
 		debugHit = new EcalHit(0.00274928542785, -14.4493122101, -0.341720342636, 181.399993896);
 		debugHits_500.push_back(debugHit);
+		debugHit->Print();
 
 
 		vector<EcalHit*> cells_50 = EcalHit::AddCells(debugHits_50);
 		vector<EcalHit*> cells_150 = EcalHit::AddCells(debugHits_150);
 		vector<EcalHit*> cells_500 = EcalHit::AddCells(debugHits_500);
 
-		cout << " 50 MeV: Merged " << cells_50.size() << " hits to " << cells_50.size() << " cells." << endl;
-		cout << "150 MeV: Merged " << cells_150.size() << " hits to " << cells_150.size() << " cells." << endl;
-		cout << "500 MeV: Merged " << cells_500.size() << " hits to " << cells_500.size() << " cells." << endl;
+		cout << " 50 MeV: Merged " << debugHits_50.size() << " hits to " << cells_50.size() << " cells." << endl;
+		cout << "150 MeV: Merged " << debugHits_150.size() << " hits to " << cells_150.size() << " cells." << endl;
+		cout << "500 MeV: Merged " << debugHits_500.size() << " hits to " << cells_500.size() << " cells." << endl;
 
 
 		for(const auto& hit : cells_50)
@@ -532,9 +554,9 @@ int main(int argc, char* argv[]) {
 			cells.push_back(hit);
 
 
-		vector<EcalCluster*> clusters_50 = EcalCluster::GetClusters(cells_50);
-		vector<EcalCluster*> clusters_150 = EcalCluster::GetClusters(cells_150);
-		vector<EcalCluster*> clusters_500 = EcalCluster::GetClusters(cells_500);
+		vector<EcalCluster*> clusters_50 = EcalHit::useOriginalPositions ? EcalCluster::GetAntiKtClusters(cells_50) : EcalCluster::GetNeighborClusters(cells_50);
+		vector<EcalCluster*> clusters_150 = EcalHit::useOriginalPositions ? EcalCluster::GetAntiKtClusters(cells_150) : EcalCluster::GetNeighborClusters(cells_150);
+		vector<EcalCluster*> clusters_500 = EcalHit::useOriginalPositions ? EcalCluster::GetAntiKtClusters(cells_500) : EcalCluster::GetNeighborClusters(cells_500);
 
 		cout << " 50 MeV: Merged " << cells_50.size() << " cells to " << clusters_50.size() << " clusters." << endl;
 		cout << "150 MeV: Merged " << cells_150.size() << " cells to " << clusters_150.size() << " clusters." << endl;
@@ -563,7 +585,7 @@ int main(int argc, char* argv[]) {
 
 	func->MakeThetaPhiMap("Clusters_ThetaPhi", clusters, extraPoints);
 
-	func->DrawEventDisplay("EventDisplay", clusters);
+	// func->DrawEventDisplay("EventDisplay", clusters);
 
 
 	if(infile != 0){

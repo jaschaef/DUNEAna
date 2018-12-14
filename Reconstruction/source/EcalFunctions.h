@@ -36,6 +36,7 @@ public:
 	int GetColor(int index);
 
 	static float Round(float f, int n);
+	static int Sign(float f){return (f > 0.) - (f < 0.);}
 
 
 	// static TString GetNavigatorPath(TGeoNode* _node, TGeoNode* _masterNode, TString _result = "");
